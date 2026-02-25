@@ -2,6 +2,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Read GGUF model from /data/local/tmp/llm/ (no permission needed for adb-pushed files)  -->
+    <!-- Write benchmark results to app-specific external storage (no permission needed API 29+) -->
+    <!-- Legacy storage permission for devices below Android 10 -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -12,6 +20,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.SciGemma"
         tools:targetApi="31">
+
         <activity
             android:name="com.example.scigemma.MainActivity"
             android:exported="true"
@@ -19,16 +28,11 @@
             android:theme="@style/Theme.SciGemma">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <uses-native-library
-            android:name="libOpenCL.so"
-            android:required="false"/>
-        <uses-native-library android:name="libOpenCL-car.so" android:required="false"/>
-        <uses-native-library android:name="libOpenCL-pixel.so" android:required="false"/>
+        <!-- OpenCL libraries removed (llama.cpp uses CPU / optional Vulkan) -->
 
     </application>
 
