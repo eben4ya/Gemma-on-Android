@@ -15,8 +15,18 @@ set(GGML_METAL           OFF CACHE BOOL "" FORCE)  # iOS only
 set(GGML_CUDA            OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS    OFF CACHE BOOL "" FORCE)
 
-# Add llama.cpp as a static library (clone it here as a submodule)
-# Run: git submodule add https://github.com/ggerganov/llama.cpp app/src/main/cpp/llama.cpp
+# Add llama.cpp as a static library (git submodule).
+# If this fails, run inside SciGemma_Android_App/:
+#   git submodule add https://github.com/ggerganov/llama.cpp app/src/main/cpp/llama.cpp
+#   git submodule update --init --recursive
+if(NOT EXISTS "${CMAKE_SOURCE_DIR}/llama.cpp/CMakeLists.txt")
+    message(FATAL_ERROR
+        "llama.cpp submodule is empty or missing.\n"
+        "Run inside SciGemma_Android_App/:\n"
+        "  git submodule add https://github.com/ggerganov/llama.cpp app/src/main/cpp/llama.cpp\n"
+        "  git submodule update --init --recursive"
+    )
+endif()
 add_subdirectory(${CMAKE_SOURCE_DIR}/llama.cpp ${CMAKE_BINARY_DIR}/llama_build)
 
 # ---- JNI bridge shared library ----
