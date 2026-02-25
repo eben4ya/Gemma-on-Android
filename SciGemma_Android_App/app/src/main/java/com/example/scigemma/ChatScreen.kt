@@ -1,5 +1,6 @@
 package com.example.scigemma
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -16,15 +17,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -33,46 +37,113 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.scigemma.architecture.ArchitectureType
+import com.example.scigemma.architecture.ProcessingMetrics
+import com.example.scigemma.ui.CloudUploadDialog
+import com.example.scigemma.ui.EmergencyAlertDialog
 
+private val Purple        = Color(0xFF6A1B9A)
+private val PurpleLight   = Color(0xFF9575CD)
+private val EmergencyRed  = Color(0xFFD32F2F)
 
+// ---- Route wrapper ----
 
 @Composable
 internal fun ChatRoute(
+    archType: ArchitectureType,
     chatViewModel: ChatViewModel = viewModel(
-        factory = ChatViewModel.getFactory(LocalContext.current.applicationContext)
+        factory = ChatViewModel.getFactory(
+            LocalContext.current.applicationContext, archType
+        )
     )
 ) {
-    val uiState by chatViewModel.uiState.collectAsStateWithLifecycle()
+    val uiState          by chatViewModel.uiState.collectAsStateWithLifecycle()
     val textInputEnabled by chatViewModel.isTextInputEnabled.collectAsStateWithLifecycle()
-    ChatScreen(
-        uiState,
-        textInputEnabled
-    ) { message ->
-        chatViewModel.sendMessage(message)
+    val lastMetrics      by chatViewModel.lastMetrics.collectAsStateWithLifecycle()
+    val cloudPayload     by chatViewModel.cloudPayload.collectAsStateWithLifecycle()
+
+    var showEmergency by rememberSaveable { mutableStateOf(false) }
+    var showCloud     by rememberSaveable { mutableStateOf(false) }
+
+    // Collect emergency events
+    LaunchedEffect(Unit) {
+        chatViewModel.emergencyEvents.collect { showEmergency = true }
     }
+
+    // Collect cloud payload readiness
+    LaunchedEffect(cloudPayload) {
+        if (cloudPayload != null) showCloud = true
+    }
+
+    // Dialogs
+    if (showEmergency) {
+        EmergencyAlertDialog(onDismiss = { showEmergency = false })
+    }
+    if (showCloud && cloudPayload != null) {
+        CloudUploadDialog(
+            payload   = cloudPayload!!,
+            onDismiss = {
+                showCloud = false
+                chatViewModel.clearCloudPayload()
+            }
+        )
+    }
+
+    ChatScreen(
+        archType         = archType,
+        uiState          = uiState,
+        textInputEnabled = textInputEnabled,
+        lastMetrics      = lastMetrics,
+        onSendMessage    = { chatViewModel.sendMessage(it) },
+        onCloudUpload    = { chatViewModel.prepareCloudPayload() }
+    )
 }
+
+// ---- Main chat screen ----
 
 @Composable
 fun ChatScreen(
+    archType: ArchitectureType,
     uiState: UiState,
     textInputEnabled: Boolean = true,
-    onSendMessage: (String) -> Unit
+    lastMetrics: ProcessingMetrics?,
+    onSendMessage: (String) -> Unit,
+    onCloudUpload: () -> Unit
 ) {
     var userMessage by rememberSaveable { mutableStateOf("") }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize(),
+        modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.Bottom
     ) {
+        // Architecture badge
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFFF3E5F5))
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text  = "Architecture: ",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF757575)
+            )
+            Text(
+                text  = archType.displayName,
+                style = MaterialTheme.typography.labelSmall,
+                color = Purple,
+                fontFamily = FontFamily.Monospace
+            )
+        }
+
+        // Message list
         LazyColumn(
             modifier = Modifier
                 .weight(1f)
@@ -85,39 +156,47 @@ fun ChatScreen(
             }
         }
 
+        // Live metrics strip (shown after first inference)
+        lastMetrics?.let { m ->
+            MetricsStrip(m)
+        }
+
+        // Input row
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 16.dp, horizontal = 4.dp),
+                .padding(vertical = 8.dp, horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-
-            Column { }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
             OutlinedTextField(
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Color(0XFF6A1B9A),
-                    unfocusedTextColor = Color(0XFF6A1B9A),
-                    focusedBorderColor = Color(0XFF6A1B9A),
-                    unfocusedBorderColor = Color(0XFF6A1B9A),
-                    focusedLabelColor = Color(0XFF6A1B9A),
-                    unfocusedLabelColor = Color(0XFF6A1B9A)
+                    focusedTextColor     = Purple,
+                    unfocusedTextColor   = Purple,
+                    focusedBorderColor   = Purple,
+                    unfocusedBorderColor = Purple,
+                    focusedLabelColor    = Purple,
+                    unfocusedLabelColor  = Purple
                 ),
                 value = userMessage,
                 onValueChange = { userMessage = it },
                 keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Sentences,
+                    capitalization = KeyboardCapitalization.Sentences
                 ),
-                label = {
-                    Text("Input")
-                },
-                modifier = Modifier
-                    .weight(0.85f),
-                enabled = textInputEnabled,
+                label    = { Text("Message") },
+                modifier = Modifier.weight(1f),
+                enabled  = textInputEnabled
             )
 
+            // Cloud upload button
+            IconButton(
+                onClick  = onCloudUpload,
+                enabled  = textInputEnabled,
+                modifier = Modifier.padding(start = 4.dp)
+            ) {
+                Icon(Icons.Default.Cloud, contentDescription = "Send to cloud", tint = PurpleLight)
+            }
+
+            // Send button
             IconButton(
                 onClick = {
                     if (userMessage.isNotBlank()) {
@@ -125,96 +204,64 @@ fun ChatScreen(
                         userMessage = ""
                     }
                 },
-                modifier = Modifier
-                    .padding(start = 16.dp)
-                    .align(Alignment.CenterVertically)
-                    .fillMaxWidth()
-                    .weight(0.15f),
                 enabled = textInputEnabled
             ) {
-                Icon(
-                    Icons.AutoMirrored.Default.Send,
-                    contentDescription = "Send",
-                    modifier = Modifier,
-                    tint = Color(0XFF6A1B9A)
-                )
+                Icon(Icons.AutoMirrored.Default.Send, contentDescription = "Send", tint = Purple)
             }
         }
     }
 }
 
+// ---- Per-message bubble ----
+
 @Composable
-fun ChatItem(
-    chatMessage: ChatMessage
-) {
-    val backgroundColor = if (chatMessage.isFromUser) {
-        Color(0XFF6A1B9A)
-    } else {
-        Color(0XFF9575CD)
-    }
-
-    val bubbleShape = if (chatMessage.isFromUser) {
+fun ChatItem(chatMessage: ChatMessage) {
+    val bgColor    = if (chatMessage.isFromUser) Purple else PurpleLight
+    val bubbleShape = if (chatMessage.isFromUser)
         RoundedCornerShape(20.dp, 4.dp, 20.dp, 20.dp)
-    } else {
+    else
         RoundedCornerShape(4.dp, 20.dp, 20.dp, 20.dp)
-    }
-
-    val horizontalAlignment = if (chatMessage.isFromUser) {
-        Alignment.End
-    } else {
-        Alignment.Start
-    }
 
     Column(
-        horizontalAlignment = horizontalAlignment,
+        horizontalAlignment = if (chatMessage.isFromUser) Alignment.End else Alignment.Start,
         modifier = Modifier
             .padding(horizontal = 8.dp, vertical = 4.dp)
             .fillMaxWidth()
     ) {
-        val author = if (chatMessage.isFromUser) {
-            "User"
-        } else {
-            "Model"
-        }
         Text(
-            color = Color(0xFF212121),
-            text = author,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(bottom = 4.dp)
+            text     = if (chatMessage.isFromUser) "You" else "Model",
+            style    = MaterialTheme.typography.bodySmall,
+            color    = Color(0xFF424242),
+            modifier = Modifier.padding(bottom = 2.dp)
         )
+
+        // Emergency indicator
+        if (chatMessage.isEmergency) {
+            Text(
+                text     = "⚠ Crisis detected",
+                style    = MaterialTheme.typography.labelSmall,
+                color    = EmergencyRed,
+                modifier = Modifier.padding(bottom = 2.dp)
+            )
+        }
+
         Row {
             BoxWithConstraints {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = backgroundColor),
-                    shape = bubbleShape,
+                    colors   = CardDefaults.cardColors(containerColor = bgColor),
+                    shape    = bubbleShape,
                     modifier = Modifier.widthIn(0.dp, maxWidth * 0.9f)
                 ) {
                     if (chatMessage.isLoading) {
                         CircularProgressIndicator(
-                            color = Color(0XFF6A1B9A),
+                            color    = Purple,
                             modifier = Modifier.padding(16.dp)
                         )
                     } else {
-                        var response = chatMessage.message
-                        response = response.replace("<start_of_turn>", "")
-                        response = response.replace("</start_of_turn>", "")
-                        response = response.replace("<end_of_turn", "")
-                        response = response.replace("</end_of_turn>", "")
-                        response = response.replace("impra ", "")
-                        response = response.replace("impractically ", "")
-                        response = response.replace("reluct ", "")
-                        response = response.replace("modelAnswer:", "")
-                        response = response.replace("userAnswer:", "")
-                        response = response.replace("encomp ", "")
-                        response = response.replace("encompiring ", "")
-                        response = response.replace("encomprifying ", "")
-                        response = response.replace("increa ", "")
-                        response = response.replace("maneuv ", "")
-                        response = response.replace("guarante ", "")
-
                         Text(
-                                text = response,
-                                modifier = Modifier.padding(16.dp)
+                            text     = cleanDisplayText(chatMessage.message),
+                            modifier = Modifier.padding(12.dp),
+                            color    = Color.White
                         )
                     }
                 }
@@ -222,3 +269,40 @@ fun ChatItem(
         }
     }
 }
+
+// ---- Live metrics strip ----
+
+@Composable
+fun MetricsStrip(m: ProcessingMetrics) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFFF3E5F5))
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        MetricChip("${m.totalLatencyMs} ms")
+        MetricChip(m.tokensPerSecondFormatted)
+        MetricChip(m.ramFormatted)
+        MetricChip("${m.emergencyDetectionMs}/${m.anonymizationMs}/${m.llmInferenceMs} ms")
+    }
+}
+
+@Composable
+private fun MetricChip(text: String) {
+    Text(
+        text     = text,
+        style    = MaterialTheme.typography.labelSmall,
+        color    = Purple,
+        fontSize = 10.sp
+    )
+}
+
+// ---- Helpers ----
+
+private fun cleanDisplayText(text: String): String = text
+    .replace("<start_of_turn>", "")
+    .replace("</start_of_turn>", "")
+    .replace("<end_of_turn>", "")
+    .replace("</end_of_turn>", "")
+    .trim()
